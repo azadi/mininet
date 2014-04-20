@@ -353,9 +353,9 @@ class Mininet( object ):
                 src, dst = self.nameToNode[ srcName ], self.nameToNode[ dstName ]
                 params = topo.linkInfo( srcName, dstName )
                 srcPort, dstPort = topo.port( srcName, dstName )
-                thread = Thread(target=self.addLink,
-                                args=( src, dst, lock, srcPort, dstPort,),
-                                kwargs=params )
+                thread = Thread( target=self.addLink,
+                                 args=( src, dst, lock, srcPort, dstPort,),
+                                 kwargs=params )
                 thread.start()
                 threads.append(thread)
                 info( '(%s, %s) ' % ( src.name, dst.name ) )
