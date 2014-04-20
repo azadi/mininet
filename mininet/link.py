@@ -32,7 +32,9 @@ class Intf( object ):
 
     "Basic interface object that can configure itself."
 
-    def __init__( self, name, node=None, port=None, link=None, **params ):
+    def __init__( self, name,
+                  node=None, port=None, link=None, lock=None,
+                  **params ):
         """name: interface name (e.g. h1-eth0)
            node: owning node (where this intf most likely lives)
            link: parent link if we're part of a link
@@ -40,6 +42,7 @@ class Intf( object ):
         self.node = node
         self.name = name
         self.link = link
+        self.lock = lock
         self.mac, self.ip, self.prefixLen = None, None, None
         # Add to node (and move ourselves if necessary )
         node.addIntf( self, port=port )
@@ -77,16 +80,16 @@ class Intf( object ):
     _ipMatchRegex = re.compile( r'\d+\.\d+\.\d+\.\d+' )
     _macMatchRegex = re.compile( r'..:..:..:..:..:..' )
 
-    def updateIP( self ):
+    def updateIP( self, ifconfig=None ):
         "Return updated IP address based on ifconfig"
-        ifconfig = self.ifconfig()
+        if ifconfig is None:
+            ifconfig = self.ifconfig()
         ips = self._ipMatchRegex.findall( ifconfig )
         self.ip = ips[ 0 ] if ips else None
         return self.ip
 
-    def updateMAC( self ):
+    def updateMAC( self, ifconfig ):
         "Return updated MAC address based on ifconfig"
-        ifconfig = self.ifconfig()
         macs = self._macMatchRegex.findall( ifconfig )
         self.mac = macs[ 0 ] if macs else None
         return self.mac
@@ -150,12 +153,17 @@ class Intf( object ):
         # the superclass config method here as follows:
         # r = Parent.config( **params )
         r = {}
+        if self.lock is not None:
+            self.lock.acquire()
         self.setParam( r, 'setMAC', mac=mac )
         self.setParam( r, 'setIP', ip=ip )
         self.setParam( r, 'isUp', up=up )
         self.setParam( r, 'ifconfig', ifconfig=ifconfig )
-        self.updateIP()
-        self.updateMAC()
+        ifconfig = self.ifconfig()
+        self.updateIP(ifconfig)
+        self.updateMAC(ifconfig)
+        if self.lock is not None:
+            self.lock.release()
         return r
 
     def delete( self ):
@@ -320,7 +328,7 @@ class Link( object ):
     """A basic link is just a veth pair.
        Other types of links could be tunnels, link emulators, etc.."""
 
-    def __init__( self, node1, node2, port1=None, port2=None,
+    def __init__( self, node1, node2, lock, port1=None, port2=None,
                   intfName1=None, intfName2=None,
                   intf=Intf, cls1=None, cls2=None, params1=None,
                   params2=None ):
@@ -359,9 +367,9 @@ class Link( object ):
             params2 = {}
 
         intf1 = cls1( name=intfName1, node=node1, port=port1,
-                      link=self, **params1  )
+                      link=self, lock=lock, **params1  )
         intf2 = cls2( name=intfName2, node=node2, port=port2,
-                      link=self, **params2 )
+                      link=self, lock=lock, **params2 )
 
         # All we are is dust in the wind, and our two interfaces
         self.intf1, self.intf2 = intf1, intf2

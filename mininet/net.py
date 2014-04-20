@@ -92,6 +92,7 @@ import select
 import signal
 from time import sleep
 from itertools import chain
+from threading import Thread, Lock
 
 from mininet.cli import CLI
 from mininet.log import info, error, debug, output
@@ -270,7 +271,7 @@ class Mininet( object ):
         "return (key,value) tuple list for every node in net"
         return zip( self.keys(), self.values() )
 
-    def addLink( self, node1, node2, port1=None, port2=None,
+    def addLink( self, node1, node2, lock, port1=None, port2=None,
                  cls=None, **params ):
         """"Add a link from node1 to node2
             node1: source node
@@ -284,7 +285,7 @@ class Mininet( object ):
         defaults.update( params )
         if not cls:
             cls = self.link
-        return cls( node1, node2, **defaults )
+        return cls( node1, node2, lock, **defaults )
 
     def configHosts( self ):
         "Configure a set of hosts."
@@ -337,12 +338,29 @@ class Mininet( object ):
             info( switchName + ' ' )
 
         info( '\n*** Adding links:\n' )
-        for srcName, dstName in topo.links(sort=True):
-            src, dst = self.nameToNode[ srcName ], self.nameToNode[ dstName ]
-            params = topo.linkInfo( srcName, dstName )
-            srcPort, dstPort = topo.port( srcName, dstName )
-            self.addLink( src, dst, srcPort, dstPort, **params )
-            info( '(%s, %s) ' % ( src.name, dst.name ) )
+        links = topo.links(sort=True)
+        total_links = len(links)
+        if total_links > self.numCores:
+            chunks = self.numCores * 2
+        else:
+            chunks = total_links
+        all_links = [links[e:e+chunks] for e in
+                    xrange(0, total_links, chunks)]
+        lock = Lock()
+        for link in all_links:
+            threads = []
+            for (srcName, dstName) in link:
+                src, dst = self.nameToNode[ srcName ], self.nameToNode[ dstName ]
+                params = topo.linkInfo( srcName, dstName )
+                srcPort, dstPort = topo.port( srcName, dstName )
+                thread = Thread(target=self.addLink,
+                                args=( src, dst, lock, srcPort, dstPort,),
+                                kwargs=params )
+                thread.start()
+                threads.append(thread)
+                info( '(%s, %s) ' % ( src.name, dst.name ) )
+            for thread in threads:
+                thread.join()
 
         info( '\n' )
 
