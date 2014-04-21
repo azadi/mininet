@@ -32,9 +32,7 @@ class Intf( object ):
 
     "Basic interface object that can configure itself."
 
-    def __init__( self, name,
-                  node=None, port=None, link=None, lock=None,
-                  **params ):
+    def __init__( self, name, node=None, port=None, link=None, **params ):
         """name: interface name (e.g. h1-eth0)
            node: owning node (where this intf most likely lives)
            link: parent link if we're part of a link
@@ -42,7 +40,6 @@ class Intf( object ):
         self.node = node
         self.name = name
         self.link = link
-        self.lock = lock
         self.mac, self.ip, self.prefixLen = None, None, None
         # Add to node (and move ourselves if necessary )
         node.addIntf( self, port=port )
@@ -153,8 +150,6 @@ class Intf( object ):
         # the superclass config method here as follows:
         # r = Parent.config( **params )
         r = {}
-        if self.lock is not None:
-            self.lock.acquire()
         self.setParam( r, 'setMAC', mac=mac )
         self.setParam( r, 'setIP', ip=ip )
         self.setParam( r, 'isUp', up=up )
@@ -162,8 +157,6 @@ class Intf( object ):
         ifconfig = self.ifconfig()
         self.updateIP(ifconfig)
         self.updateMAC(ifconfig)
-        if self.lock is not None:
-            self.lock.release()
         return r
 
     def delete( self ):
@@ -346,6 +339,8 @@ class Link( object ):
         # This is a bit awkward; it seems that having everything in
         # params would be more orthogonal, but being able to specify
         # in-line arguments is more convenient!
+        if lock is not None:
+            lock.acquire()
         if port1 is None:
             port1 = node1.newPort()
         if port2 is None:
@@ -373,6 +368,8 @@ class Link( object ):
 
         # All we are is dust in the wind, and our two interfaces
         self.intf1, self.intf2 = intf1, intf2
+        if lock is not None:
+            lock.release()
 
     @classmethod
     def intfName( cls, node, n ):
@@ -398,9 +395,9 @@ class Link( object ):
 
 class TCLink( Link ):
     "Link with symmetric TC interfaces configured via opts"
-    def __init__( self, node1, node2, port1=None, port2=None,
+    def __init__( self, node1, node2, lock=None, port1=None, port2=None,
                   intfName1=None, intfName2=None, **params ):
-        Link.__init__( self, node1, node2, port1=port1, port2=port2,
+        Link.__init__( self, node1, node2, lock, port1=port1, port2=port2,
                        intfName1=intfName1, intfName2=intfName2,
                        cls1=TCIntf,
                        cls2=TCIntf,
