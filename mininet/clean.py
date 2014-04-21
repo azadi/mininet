@@ -16,6 +16,8 @@ import time
 from mininet.log import info
 from mininet.term import cleanUpScreens
 
+from threading import Thread
+
 def sh( cmd ):
     "Print a command and send it to the shell"
     info( cmd + '\n' )
@@ -65,8 +67,14 @@ def cleanup():
     info( "*** Removing all links of the pattern foo-ethX\n" )
     links = sh( "ip link show | "
                 "egrep -o '([-_.[:alnum:]]+-eth[[:digit:]]+)'" ).splitlines()
+    threads = []
     for link in links:
         if link:
-            sh( "ip link del " + link )
+            thread = Thread( target=sh, args=("ip link del " + link,) )
+            thread.start()
+            threads.append(thread)
+
+    for thread in threads:
+        thread.join()
 
     info( "*** Cleanup complete.\n" )
